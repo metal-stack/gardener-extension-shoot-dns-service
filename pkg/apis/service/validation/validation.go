@@ -35,6 +35,7 @@ var supportedProviderTypes = []string{
 	"netlify-dns",
 	"openstack-designate",
 	"remote",
+	"powerdns",
 }
 
 // ValidateDNSConfig validates the passed DNSConfig.
