@@ -13,7 +13,7 @@ for managed DNS names.
 
 To generally enable the DNS management for shoot objects the 
 `shoot-dns-service` extension must be registered by providing an
-appropriate [extension registration](https://github.com/gardener/gardener-extension-shoot-dns-service/blob/master/example/controller-registration.yaml) in the garden cluster.
+appropriate [extension registration](../../example/controller-registration.yaml) in the garden cluster.
 
 Here it is possible to decide whether the extension should be always available
 for all shoots or whether the extension must be separately enabled per shoot.
@@ -48,8 +48,8 @@ providerConfig:
       ...
     dnsControllerManager:
       image:
-        repository: eu.gcr.io/gardener-project/dns-controller-manager
-        tag: v0.13.3
+        repository: europe-docker.pkg.dev/gardener-project/releases/dns-controller-manager
+        tag: v0.16.0
       configuration:
         cacheTtl: 300
         controllers: dnscontrollers,dnssources

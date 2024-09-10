@@ -53,7 +53,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -220,13 +220,47 @@ func (a *actuator) Delete(ctx context.Context, log logr.Logger, ex *extensionsv1
 	return a.delete(ctx, log, ex, false)
 }
 
+// ForceDelete the Extension resource.
+func (a *actuator) ForceDelete(ctx context.Context, log logr.Logger, ex *extensionsv1alpha1.Extension) error {
+	// try to delete managed DNS entries normally first
+	if err := a.deleteManagedDNSEntries(ctx, ex); err != nil {
+		// ignore failed deletion of DNSEntries
+		if _, ok := err.(*reconcilerutils.RequeueAfterError); !ok {
+			return err
+		}
+	}
+
+	cluster, err := controller.GetCluster(ctx, a.Client(), ex.Namespace)
+	if err != nil {
+		return err
+	}
+
+	if err := a.deleteSeedResources(ctx, log, cluster, ex, false, true); err != nil {
+		return err
+	}
+
+	entriesHelper := common.NewShootDNSEntriesHelper(ctx, a.Client(), ex)
+	if err := entriesHelper.ForceDeleteAll(); err != nil {
+		return fmt.Errorf("force deletion of DNSEntries failed: %w", err)
+	}
+
+	if a.isManagingDNSProviders(cluster.Shoot.Spec.DNS) {
+		// no forced deletion of providers needed, as they can be deleted normally as soon as there are no DNSEntries anymore
+		if err := a.deleteDNSProviders(ctx, log, ex.Namespace); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (a *actuator) delete(ctx context.Context, log logr.Logger, ex *extensionsv1alpha1.Extension, migrate bool) error {
 	cluster, err := controller.GetCluster(ctx, a.Client(), ex.Namespace)
 	if err != nil {
 		return err
 	}
 
-	if err := a.deleteSeedResources(ctx, log, cluster, ex, migrate); err != nil {
+	if err := a.deleteSeedResources(ctx, log, cluster, ex, migrate, false); err != nil {
 		return err
 	}
 	return a.deleteShootResources(ctx, ex.Namespace)
@@ -603,20 +637,22 @@ func (a *actuator) replicateDNSProviders(dnsconfig *apisservice.DNSConfig) bool 
 	return a.Config().ReplicateDNSProviders
 }
 
-func (a *actuator) deleteSeedResources(ctx context.Context, log logr.Logger, cluster *controller.Cluster, ex *extensionsv1alpha1.Extension, migrate bool) error {
+func (a *actuator) deleteSeedResources(ctx context.Context, log logr.Logger, cluster *controller.Cluster, ex *extensionsv1alpha1.Extension, migrate, force bool) error {
 	namespace := ex.Namespace
 	a.Info("Component is being deleted", "component", service.ExtensionServiceName, "namespace", namespace)
 
-	if !migrate {
-		err := a.deleteManagedDNSEntries(ctx, ex)
-		if err != nil {
-			return err
+	if !force {
+		if !migrate {
+			err := a.deleteManagedDNSEntries(ctx, ex)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
-	if a.isManagingDNSProviders(cluster.Shoot.Spec.DNS) {
-		if err := a.deleteDNSProviders(ctx, log, namespace); err != nil {
-			return err
+		if a.isManagingDNSProviders(cluster.Shoot.Spec.DNS) {
+			if err := a.deleteDNSProviders(ctx, log, namespace); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -694,7 +730,7 @@ func (a *actuator) collectProviderDetailsOnDeletingDNSEntries(ctx context.Contex
 			status = append(status, fmt.Sprintf("error on retrieving status of provider %s: %s", k, err))
 			continue
 		}
-		status = append(status, fmt.Sprintf("provider %s has status: %s", name, pointer.StringDeref(provider.Status.Message, "unknwon")))
+		status = append(status, fmt.Sprintf("provider %s has status: %s", name, ptr.Deref(provider.Status.Message, "unknwon")))
 	}
 	return strings.Join(status, ", ")
 }
