@@ -1,16 +1,6 @@
-// Copyright (c) 2019 SAP SE or an SAP affiliate company. All rights reserved. This file is licensed under the Apache Software License, v. 2 except as noted otherwise in the LICENSE file
+// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Gardener contributors
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
 package lifecycle
 
@@ -42,6 +32,7 @@ import (
 	gutil "github.com/gardener/gardener/pkg/utils/gardener"
 	kutil "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
+	"github.com/gardener/gardener/pkg/utils/retry"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
@@ -59,6 +50,7 @@ import (
 
 	"github.com/gardener/gardener-extension-shoot-dns-service/charts"
 	"github.com/gardener/gardener-extension-shoot-dns-service/imagevector"
+	"github.com/gardener/gardener-extension-shoot-dns-service/pkg/apis/helper"
 	apisservice "github.com/gardener/gardener-extension-shoot-dns-service/pkg/apis/service"
 	"github.com/gardener/gardener-extension-shoot-dns-service/pkg/apis/service/validation"
 	"github.com/gardener/gardener-extension-shoot-dns-service/pkg/controller/common"
@@ -695,8 +687,9 @@ func (a *actuator) deleteManagedDNSEntries(ctx context.Context, ex *extensionsv1
 			}
 		}
 		details := a.collectProviderDetailsOnDeletingDNSEntries(ctx, list)
+		err = fmt.Errorf("waiting until shoot DNS entries have been deleted: %s", details)
 		return &reconcilerutils.RequeueAfterError{
-			Cause:        fmt.Errorf("waiting until shoot DNS entries have been deleted: %s", details),
+			Cause:        retry.RetriableError(util.DetermineError(err, helper.KnownCodes)),
 			RequeueAfter: 15 * time.Second,
 		}
 	}
